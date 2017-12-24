@@ -10,6 +10,7 @@ namespace li3_resources\net\http;
 
 use Countable;
 use lithium\util\Set;
+use lithium\aop\Filters;
 use lithium\core\Libraries;
 use lithium\util\Inflector;
 use lithium\core\ConfigException;
@@ -113,7 +114,7 @@ class Resources extends \lithium\core\StaticObject {
 	public static function all($resources, array $config, $request) {
 		$params = compact('config', 'resources', 'request');
 
-		return static::_filter(__FUNCTION__, $params, function($self, $params) {
+		return Filters::run(get_called_class(), __FUNCTION__, $params, function($params) {
 			$config    = $params['config'] + array('binding' => null);
 			$resources = $params['resources'];
 			$request   = $params['request'];
@@ -123,7 +124,7 @@ class Resources extends \lithium\core\StaticObject {
 			);
 
 			$map = function($name, $resource) use (
-				&$data, &$map, $self, $request, $config, $resources, $defaults
+				&$data, &$map, $request, $config, $resources, $defaults
 			) {
 				if (is_int($name)) {
 					$name = $resource;
@@ -146,7 +147,7 @@ class Resources extends \lithium\core\StaticObject {
 					}
 					$map($key, $resources[$key]);
 				}
-				$data[$name] = $self::get($request, compact('name', 'data') + $resource, $config);
+				$data[$name] = static::get($request, compact('name', 'data') + $resource, $config);
 			};
 
 			foreach ((array) $resources as $name => $resource) {
@@ -195,22 +196,22 @@ class Resources extends \lithium\core\StaticObject {
 		$options += $defaults;
 		$func = __FUNCTION__;
 
-		return static::_filter($func, compact('request', 'options'), function($self, $params) {
+		return Filters::run(get_called_class(), $func, compact('request', 'options'), function($params) {
 			$options = $params['options'];
 			$request = $params['request'];
 
 			if ($options['in']) {
-				return $self::queryCollection($options, $query);
+				return static::queryCollection($options, $query);
 			}
-			$query = $self::mapQuery($options, $request);
+			$query = static::mapQuery($options, $request);
 			$options['call'] = Set::merge($query, (array) $options['call']);
 
 			if (!$options['call']['conditions'] && $options['params']) {
 				return;
 			}
 
-			$options['binding'] = call_user_func($self::handlers('binding'), $request, $options);
-			$func = $self::handlers($options['name']) ?: $self::handlers('default');
+			$options['binding'] = call_user_func(static::handlers('binding'), $request, $options);
+			$func = static::handlers($options['name']) ?: static::handlers('default');
 
 			if (is_array($func)) {
 				$key = isset($options['call'][0]) ? $options['call'][0] : 'all';
@@ -422,7 +423,7 @@ class Resources extends \lithium\core\StaticObject {
 	}
 
 	public static function bind($class) {
-		$class::applyFilter('_callable', function($self, $params, $chain) {
+		Filters::apply($class, '_callable', function($params, $next) {
 			$options = $params['options'];
 			$name = $params['params']['controller'];
 
@@ -431,7 +432,7 @@ class Resources extends \lithium\core\StaticObject {
 					return Libraries::instance(null, $class, $options);
 				}
 			}
-			return $chain->next($self, $params, $chain);
+			return $next($params);
 		});
 	}
 }
